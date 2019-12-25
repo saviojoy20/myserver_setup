@@ -1,0 +1,149 @@
+---
+- name: "Installation of Webmin,  configuring Transmission webui, and squid proxy"
+  hosts: happy
+  become: true
+  vars_files:
+    - vars.yml
+
+  tasks:
+    - name: Updating your packages
+      yum:
+         name: "*"
+         state: latest
+    - name: Installing epel-release
+      yum: 
+        name: epel-release
+        state: present
+    - name: "Installing Apache mysql php and MySQL-python "
+      yum:
+        name: 
+          - httpd
+          - mariadb-server
+          - mariadb
+          - php
+          - php-mysql
+          - php-fpm
+          - MySQL-python
+        state: present
+    - name: "Restarting Apache and mariadb"
+      service:
+        name: "{{item}}"
+        state: restarted
+        enabled: true
+      with_items:
+        - httpd
+        - mariadb
+    - name: "Creating info.php"
+      copy:
+        content: "<?php phpinfo(); ?>"
+        dest: /var/www/html/info.php
+        owner: apache
+        group: apache
+    - debug:
+        msg: "your LAMP stack installation is complete please visit http://{{ansible_all_ipv4_addresses.0}}/info.php to check the installation" 
+    - name: "Madidb-Server - Reset Root-Password"
+      ignore_errors: true
+      mysql_user:
+        login_user: 'root'
+        login_password: ''
+        user: 'root'
+        password: '{{ mysql_root }}'
+        host_all: true
+    - name: "Mariadb-Server - Restarting/Enabling"
+      service:
+        name: mariadb
+        state: restarted
+        enabled: true
+
+    - name: "Mariadb-Server - Removing Anonymous Users"
+      mysql_user:
+        login_user: 'root'
+        login_password: '{{ mysql_root }}'
+        user: ''
+        host_all: true
+        state: absent
+    - name: "Mariadb-Server - Removing test database"
+      mysql_db:
+        login_user: 'root'
+        login_password: '{{ mysql_root }}'
+        name: 'test'
+        state: absent
+    - debug: 
+        msg: "Continueing Webmin installlation"
+    - name: "Copying Webmin repo file"
+      copy:
+        src: webmin.repo
+        dest: /etc/yum.repos.d/webmin.repo
+    - name: "downloading key for webmin"
+      get_url:
+        url: http://www.webmin.com/jcameron-key.asc
+        dest: ./
+    - name: "importing key"
+      shell: rpm --import jcameron-key.asc
+   
+    - name: Installing webmin
+      yum: 
+        name: webmin
+        state: present
+    - debug:
+        msg: "Webmin installation is complete. You can now login to https://{{ansible_all_ipv4_addresses.0}}:10000/ as root with your root password."
+    - name: Installing fail2ban, squid proxy  httpd-tools proftp , firewalld and Transmission
+      yum:
+        name:
+          - fail2ban
+          - squid
+          - httpd-tools
+          - proftpd
+          - proftpd-utils
+          - firewalld
+          - httpd-tools
+          - transmission-cli
+          - transmission-common
+          - transmission-daemon
+        state: present
+    - name: "Restarting transmission"
+      service:
+         name: transmission-daemon
+         state: restarted
+         enabled: true
+    - name: Stopping transmission for editing configuration file
+      service:
+         name: transmission-daemon
+         state: stopped
+         enabled: true
+    - name : "Copying transmission configuration file to the server"
+      template: 
+         src: settings.json
+         dest: /var/lib/transmission/.config/transmission-daemon/settings.json
+         owner: transmission 
+         group: transmission
+    - name: "Restarting transmission with new configuration"  
+      service:
+         name: transmission-daemon
+         state: restarted
+         enabled: true
+    - debug:
+        msg: "Finished installing transmission Please visit http://{{ansible_all_ipv4_addresses.0}}:9091 "  
+    - debug:
+         msg: Configuring squid proxy and httpd-tools  
+    - name: Stopping sqiud for configuration
+      service:
+        name: squid
+        state: stopped
+    - name: Copying passwd file for squid authentication
+      copy: 
+        src: passwd
+        dest: /etc/squid/passwd
+        owner: squid
+        group: squid
+    - name: Copying squid configuration  file 
+      copy:
+        src: squid.conf
+        dest: /etc/squid/squid.conf
+        group: squid
+    - name: Starting squid with new configuration please add users to the /etc/squid/passwd file
+      service: 
+        name: squid
+        state: started
+    - debug:
+        msg: Installation of Webmin and setup for Transmission WebUI and Proxy are completed. Thanks
