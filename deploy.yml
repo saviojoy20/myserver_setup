@@ -54,6 +54,8 @@
         name: mariadb
         state: restarted
         enabled: true
+    - debug:
+        msg: "Starting server hardening"
 
     - name: "Mariadb-Server - Removing Anonymous Users"
       mysql_user:
@@ -68,6 +70,12 @@
         login_password: '{{ mysql_root }}'
         name: 'test'
         state: absent
+    - name: installing rkhunter and lynis on server
+      yum:
+        name: 
+          - rkhunter
+          - lynis
+        state: present
     - debug: 
         msg: "Continueing Webmin installlation"
     - name: "Copying Webmin repo file"
